@@ -9,5 +9,5 @@
   "loggers": ["letpot"],
   "quality_scale": "silver",
   "requirements": ["letpot==0.7.0"],
-  "version": "1.0.0"
+  "version": "1.0.1"
 }

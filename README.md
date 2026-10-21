@@ -2,25 +2,27 @@
 
 This custom component adds support for LetPot watering systems (such as the **LetPot DI-3** watering valve) to Home Assistant. 
 
-It is based on the official Home Assistant LetPot integration (which currently only supports hydroponic gardens), but has been extended to support watering systems and includes critical fixes to prevent device configuration corruption.
+This custom component is based on the Home Assistant LetPot integration and uses `letpot==0.7.0` for device communication. It has been tested with the DI-3 watering system.
 
 ## Features
 - **ON/OFF Switch (`switch.letpot`)**: Turns the physical water pump on and off instantly.
 - **Running Sensor (`binary_sensor.letpot_running`)**: Indicates if the water pump is actively pumping water.
-- **Protocol Fix**: Includes an internal runtime monkey-patch that corrects parameter byte alignment issues in the communication layer, making MQTT updates 100% stable.
+- **Correct protocol encoding**: Uses the standard `letpot` library encoder without the incorrect byte-order override shipped in version 1.0.0.
 
 ---
 
 ## Installation
 
 ### 1. Copy Files
-Copy the `letpot` directory containing this integration into your Home Assistant's `custom_components/` directory:
+Download the component ZIP from [Releases](https://github.com/HSTEP/letpot2.0-home-assistant/releases), extract it, and copy its `letpot` folder into your Home Assistant configuration directory under `custom_components/`:
+
+If downloading the source repository instead, its Python files, `manifest.json`, and `strings.json` are at the repository root. Copy those files into a folder named `letpot`; do not copy the repository folder under its original name. The final path must be:
 ```text
 config/custom_components/letpot/
 ```
 
 ### 2. Restart Home Assistant
-Go to **Developer Tools -> YAML** and click **Restart** to load the custom integration.
+Perform a full **Restart Home Assistant** from Settings. A YAML reload or integration reload does not replace the already imported Python code.
 
 ### 3. Add Integration
 1. Go to **Settings -> Devices & Services -> Add Integration**.
@@ -30,9 +32,34 @@ Go to **Developer Tools -> YAML** and click **Restart** to load the custom integ
 
 ---
 
+## Upgrading from 1.0.0 / pump stops after 1–3 seconds
+
+Version **1.0.1** removes an incorrect runtime override of `ISEConverter.get_update_status_message`. The override moved the manual-duration bytes before the cycle-enabled flag. On the tested DI-3, this shifted the value written to the device: a requested duration of 3 minutes was read back as 768 minutes. The device was also found with a manual duration of 0, which was consistent with the short-stop symptom.
+
+The standard encoder in `letpot==0.7.0` uses the correct field order for the tested device. This update does not change that library or any other integration functionality.
+
+1. Back up your existing `custom_components/letpot` folder.
+2. Replace the component files with version 1.0.1 and fully restart Home Assistant.
+3. Check the **manual watering duration stored in the device**, using the official LetPot app, and restore a positive value such as 3 minutes. Updating the integration alone does not repair a value already stored incorrectly in the pump.
+4. Keep your HA helper duration consistent with the intended run length. A helper set to 3 minutes cannot keep the pump running when the device's own duration is 0.
+5. Test one watering run while present. Do not assume that a short stop always has this cause; water supply, tubing, and pump faults may produce similar symptoms.
+
+Validation for this fix: the DI-3 accepted the standard encoder's write, device readback confirmed 3 manual minutes with the pump off and cycle settings unchanged, and the patched integration loaded after a full HA restart. Other models and firmware versions have not been verified here.
+
+Existing unavailable watering-parameter entities are not repaired by this release. The custom component does not currently create those parameter sensors/controls; this fix addresses command encoding.
+
+## Tests
+
+The regression checks use the pinned device library and do not connect to a device:
+
+```sh
+python -m pip install 'letpot==0.7.0'
+python -m unittest -v test_protocol.py
+```
+
 ## Recommended Setup (Timers and Scheduling)
 
-Because device-offline schedules can be unreliable on the physical valve's firmware, we recommend managing watering duration and schedules directly inside Home Assistant using native helpers and automations.
+You can manage start times and an additional turn-off timer using native Home Assistant helpers and automations. The device also has its own manual watering duration; the HA timer does not replace it. Set the device duration in the official LetPot app to the intended run length before using these automations.
 
 ### 1. Create Helpers
 Go to **Settings -> Devices & Services -> Helpers** and create:
