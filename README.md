@@ -48,6 +48,41 @@ Validation for this fix: the DI-3 accepted the standard encoder's write, device 
 
 Existing unavailable watering-parameter entities are not repaired by this release. The custom component does not currently create those parameter sensors/controls; this fix addresses command encoding.
 
+### Restore the stored duration (one-time recovery)
+
+The update fixes future commands; it does not automatically rewrite persistent settings in the pump. There is no universal safe watering duration, so the component must not silently set everyone's device to 3 minutes.
+
+First install 1.0.1 and fully restart HA. Temporarily disable HA watering automations and leave the pump stopped while changing settings.
+
+**Using the LetPot mobile app:** open the affected watering device, select its manual watering controls, change the manual run duration to the time you actually want (for example, **3 minutes**), and save/confirm the setting if the app offers that control. Return to the screen and check that the duration remains correct. App labels differ by version. If your app only offers an immediate start, or does not let you save a duration, use the terminal recovery below instead. Changing only HA's `input_number.letpot_manual_duration` does not change the device's stored duration.
+
+**Using a terminal:** a separate recovery script is included in `tools/repair_manual_duration.py` in the source repository. It uses the existing HA LetPot account locally to contact `broker.letpot.net`. It does not print credentials or start watering. By default it only reads status; writing requires `--apply`. Use a Python 3.11+ terminal with access to your HA configuration and an isolated environment, not HA's managed Python environment:
+
+```sh
+git clone https://github.com/HSTEP/letpot2.0-home-assistant.git
+cd letpot2.0-home-assistant
+python3 -m venv .venv-repair
+. .venv-repair/bin/activate
+python -m pip install 'letpot==0.7.0'
+
+# Replace the path and YOUR_DI3_SERIAL with your own values.
+# First read the current duration; this does not change settings.
+python tools/repair_manual_duration.py \
+  --config /config/.storage/core.config_entries \
+  --serial YOUR_DI3_SERIAL
+
+# Then explicitly set the intended duration, for example 3 minutes.
+python tools/repair_manual_duration.py \
+  --config /config/.storage/core.config_entries \
+  --serial YOUR_DI3_SERIAL --minutes 3 --apply
+```
+
+Use the serial from your device/app. The configuration path depends on your installation; `/config` or `/homeassistant` are common mounts. Keep `.storage/core.config_entries` private; do not upload it or paste it into an issue. If there are several LetPot entries, select the appropriate one with `--entry-id`.
+
+The tool only allows DI-3/ISE06, refuses to write while the pump is running or its mode is not manual/off, and preserves the current cycle settings. Success must say **`Verified: 3 minutes; pump off; cycle settings unchanged.`** (or your chosen duration). A timeout or mismatch is not confirmation of success; check the app before retrying. Its encoding follows the DI-3 repair verified for this release; the helper itself has offline tests and has not been separately run against other users' hardware.
+
+Finally, set your HA helper to the intended duration, test one watering run while present, and re-enable your automations. Do not factory-reset or remove the device as a first recovery step.
+
 ## Tests
 
 The regression checks use the pinned device library and do not connect to a device:
@@ -55,6 +90,7 @@ The regression checks use the pinned device library and do not connect to a devi
 ```sh
 python -m pip install 'letpot==0.7.0'
 python -m unittest -v test_protocol.py
+python -m unittest -v tools.test_repair_manual_duration
 ```
 
 ## Recommended Setup (Timers and Scheduling)

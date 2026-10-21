@@ -1,5 +1,11 @@
 # Changelog
 
+## Recovery documentation (after 1.0.1)
+
+- Add step-by-step recovery for a device with a stored manual duration of zero.
+- Add an optional DI-3 terminal recovery tool: read-only by default, explicit duration write, idle-state guard, and device readback verification.
+- Add four offline recovery tests. The installed component and the v1.0.1 component ZIP are unchanged.
+
 ## 1.0.1 — 2026-10-21
 
 - Removed the custom runtime override of `ISEConverter.get_update_status_message`. It placed manual-duration bytes before the cycle-enabled flag, corrupting the duration on the tested DI-3.
